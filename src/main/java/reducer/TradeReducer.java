@@ -10,7 +10,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class TradeReducer extends Reducer<Text, Text, NullWritable, Text> {
+public class TradeReducer extends Reducer<NullWritable, Text, NullWritable, Text> {
     private Map<String, String> orderDataMap = new HashMap<>();
     @Override
     protected void setup(Context context) throws IOException {
@@ -29,7 +29,7 @@ public class TradeReducer extends Reducer<Text, Text, NullWritable, Text> {
     }
 
     @Override
-    protected void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+    protected void reduce(NullWritable key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
         for (Text value : values) {
             String[] fields = value.toString().split("\t");
             if (fields.length == 4) {

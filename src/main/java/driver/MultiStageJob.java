@@ -3,6 +3,8 @@ package driver;
 import mapper.OrderMapper;
 import mapper.TradeMapper;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapreduce.Job;
@@ -33,16 +35,17 @@ public class MultiStageJob {
         Job job1 = Job.getInstance(conf1, "Process Order Data");
         job1.setJarByClass(MultiStageJob.class);
         job1.setMapperClass(OrderMapper.class);
-        job1.setReducerClass(null);
         job1.setMapOutputKeyClass(Text.class);
         job1.setMapOutputValueClass(Text.class);
         job1.setOutputKeyClass(Text.class);
         job1.setOutputValueClass(Text.class);
+        job1.setNumReduceTasks(0);
 
         FileInputFormat.addInputPath(job1, new Path(orderInputPath));
         FileOutputFormat.setOutputPath(job1, new Path(intermediateOutputPath));
 
         if (!job1.waitForCompletion(true)) {
+            System.err.println("Job 1 failed");
             System.exit(1);
         }
         //第一个任务执行完成才会开始执行第二个任务
@@ -55,19 +58,25 @@ public class MultiStageJob {
 
         Job job2 = Job.getInstance(conf2, "Process Trade Data");
 
-        //TODO  Add intermediate order data as cache file
-        job2.addCacheFile(new Path(intermediateOutputPath + "/part-*").toUri());
-
         job2.setJarByClass(MultiStageJob.class);
         job2.setMapperClass(TradeMapper.class);
         job2.setReducerClass(TradeReducer.class);
-        job2.setMapOutputKeyClass(Text.class);
+        job2.setMapOutputKeyClass(NullWritable.class);
         job2.setMapOutputValueClass(Text.class);
         job2.setOutputKeyClass(NullWritable.class);
         job2.setOutputValueClass(Text.class);
 
         FileInputFormat.addInputPath(job2, new Path(tradeInputPath));
         FileOutputFormat.setOutputPath(job2, new Path(finalOutputPath));
+
+        FileSystem fs = FileSystem.get(conf2);
+        FileStatus [] fileStatuses = fs.listStatus(new Path(intermediateOutputPath)); //列出中间路径的文件
+        for (FileStatus status : fileStatuses){
+            String filename = status.getPath().getName();
+            if (filename.startsWith("part-")){
+                job2.addCacheFile(status.getPath().toUri());
+            }
+        }
 
         if (!job2.waitForCompletion(true)) {
             System.exit(1);

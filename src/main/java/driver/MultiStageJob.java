@@ -121,8 +121,8 @@ public class MultiStageJob {
         job4.setJarByClass(MultiStageJob.class);
         job4.setMapperClass(FinalCalculationMapper.class);
         job4.setReducerClass(FinalCalculationReducer.class);
-        job3.setMapOutputKeyClass(Text.class);
-        job3.setMapOutputValueClass(Text.class);
+        job4.setMapOutputKeyClass(Text.class);
+        job4.setMapOutputValueClass(Text.class);
         job4.setOutputKeyClass(Text.class);
         job4.setOutputValueClass(Text.class);
 

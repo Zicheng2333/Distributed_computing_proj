@@ -28,21 +28,23 @@ public class FinalCalculationReducer extends Reducer<Text, Text, Text, Text> {
                 continue; // 跳过格式不正确的数据
             }
 
+            String label = fields[0]; // 分类标签
+            String tradeType = fields[1]; // 买/卖
+            long tradeQty = Long.parseLong(fields[2]); // 成交量
+            double tradeAmount = Double.parseDouble(fields[3]); // 成交额
 
-            long tradeQty = Long.parseLong(fields[0]); // 成交量
-            double tradeAmount = Double.parseDouble(fields[1]); // 成交额
-            String label = fields[2]; // 分类标签
-            String tradeType = fields[3]; // 买/卖
 
             // 汇总主力流入与流出
             if (Integer.parseInt(tradeType) == 1) {
-                mainInflow += tradeAmount;
+
                 if (label.equals("超大")) {
                     ultraBuyQty += tradeQty;
                     ultraBuyAmount += tradeAmount;
+                    mainInflow += tradeAmount;
                 } else if (label.equals("大")) {
                     largeBuyQty += tradeQty;
                     largeBuyAmount += tradeAmount;
+                    mainInflow += tradeAmount;
                 } else if (label.equals("中")) {
                     midBuyQty += tradeQty;
                     midBuyAmount += tradeAmount;
@@ -51,13 +53,15 @@ public class FinalCalculationReducer extends Reducer<Text, Text, Text, Text> {
                     smallBuyAmount += tradeAmount;
                 }
             } else if (Integer.parseInt(tradeType) == 0) {
-                mainOutflow += tradeAmount;
+
                 if (label.equals("超大")) {
                     ultraSellQty += tradeQty;
                     ultraSellAmount += tradeAmount;
+                    mainOutflow += tradeAmount;
                 } else if (label.equals("大")) {
                     largeSellQty += tradeQty;
                     largeSellAmount += tradeAmount;
+                    mainOutflow += tradeAmount;
                 } else if (label.equals("中")) {
                     midSellQty += tradeQty;
                     midSellAmount += tradeAmount;

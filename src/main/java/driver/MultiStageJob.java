@@ -18,7 +18,7 @@ import reducer.TradeReducer;
 
 public class MultiStageJob {
     public static void main(String[] args) throws Exception {
-        if (args.length != 7) {
+        if (args.length != 10) {
             System.err.println("Usage: MultiStageJob <orderInputPath> <tradeInputPath> <intermediateOutputPath1> <intermediateOutputPath2> <intermediateOutputPath3> <finalOutputPath> <securityID> <circulatingStock> <timeStart> <timeEnd> "); //TODO 目前只设计了trade和offer各只有一个路径的情况，如果需要读取上午和下午的文件只需要稍作修改即可
             System.exit(-1);
         }

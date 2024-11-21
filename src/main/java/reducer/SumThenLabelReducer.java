@@ -52,7 +52,7 @@ public class SumThenLabelReducer extends Reducer<Text, Text, Text, Text> {
         double tradeVolumeRatio = (double) totalTradeQty / circulatingStock;
 
         // 分类标签逻辑
-        String label;
+        String label = "";
         if (tradeVolumeRatio >= 0.003 || totalTradeQty >= 200000 || totalTradeAmount >= 1000000) {
             label = "超大";
         } else if (tradeVolumeRatio >= 0.001 || totalTradeQty >= 60000 || totalTradeAmount >= 300000) {

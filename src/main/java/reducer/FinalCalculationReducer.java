@@ -77,7 +77,7 @@ public class FinalCalculationReducer extends Reducer<Text, Text, Text, Text> {
 
         // 输出
         String result = String.join("\t",
-                String.valueOf(mainInflow), String.valueOf(mainOutflow), String.valueOf(netInflow),
+                String.valueOf(netInflow),String.valueOf(mainInflow), String.valueOf(mainOutflow),
                 String.valueOf(ultraBuyQty), String.valueOf(ultraBuyAmount),
                 String.valueOf(ultraSellQty), String.valueOf(ultraSellAmount),
                 String.valueOf(largeBuyQty), String.valueOf(largeBuyAmount),

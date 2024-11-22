@@ -20,6 +20,6 @@ public class SumMapper extends Mapper < LongWritable , Text , Text , Text > {
         }
 
         String infos = parts[2] + "\t" + parts[3] + "\t" + parts[4];
-        context.write(ApplSeqNum,new Text(infos));
+        context.write(new Text(ApplSeqNum+"+"+parts[4]),new Text(infos));
     }
 }

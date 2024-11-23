@@ -27,7 +27,7 @@ public class TradeMapper extends Mapper<LongWritable, Text, NullWritable, Text> 
 
             String interValue = bidApplSeqNum+"\t"+offerApplSeqNum+"\t"+price+"\t"+tradeQty;
 
-            if("F".equals(execType) && sID.equals(securityID) && tradeTime>=timeS && tradeTime<=timeE){
+            if("F".equals(execType) && sID.equals(securityID) && tradeTime>=timeS && tradeTime<timeE){
                 context.write(NullWritable.get(), new Text(interValue));
             }
         }

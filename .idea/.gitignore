@@ -1,7 +1,14 @@
+<<<<<<< HEAD
 # Default ignored files
 /shelf/
 /workspace.xml
 # Editor-based HTTP Client requests
+=======
+# 默认忽略的文件
+/shelf/
+/workspace.xml
+# 基于编辑器的 HTTP 客户端请求
+>>>>>>> 9d3711bb2012fe1abb7c76016da48283532a2138
 /httpRequests/
 # Datasource local storage ignored files
 /dataSources/

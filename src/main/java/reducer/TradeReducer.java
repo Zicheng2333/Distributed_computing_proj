@@ -37,7 +37,7 @@ public class TradeReducer extends Reducer<NullWritable, Text, NullWritable, Text
                 String offerTime = orderDataMap.get(fields[1]);
 
                 if (bidTime != null && offerTime != null) {
-                    int type = Long.parseLong(offerTime) > Long.parseLong(bidTime) ? 0 : 1;
+                    int type = Long.parseLong(bidTime) > Long.parseLong(offerTime) ? 1 : 0;
                     context.write(NullWritable.get(), new Text(value + "\t" + type));
                 }
             }

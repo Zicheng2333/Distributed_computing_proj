@@ -11,23 +11,23 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class SumThenLabelReducer extends Reducer<Text, Text, Text, Text> {
-    private Map<String, Long> circulatingStockMap = new HashMap<>();
-
-    @Override
-    protected void setup(Context context) throws IOException {
-        Path[] cacheFiles = context.getLocalCacheFiles();
-        if (cacheFiles != null) {
-            for (Path cacheFile : cacheFiles) {
-                try (BufferedReader reader = new BufferedReader(new FileReader(cacheFile.toString()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        String[] fields = line.split("\t");
-                        circulatingStockMap.put(fields[0], Long.parseLong(fields[1]));
-                    }
-                }
-            }
-        }
-    }
+//    private Map<String, Long> circulatingStockMap = new HashMap<>();
+//
+//    @Override
+//    protected void setup(Context context) throws IOException {
+//        Path[] cacheFiles = context.getLocalCacheFiles();
+//        if (cacheFiles != null) {
+//            for (Path cacheFile : cacheFiles) {
+//                try (BufferedReader reader = new BufferedReader(new FileReader(cacheFile.toString()))) {
+//                    String line;
+//                    while ((line = reader.readLine()) != null) {
+//                        String[] fields = line.split("\t");
+//                        circulatingStockMap.put(fields[0], Long.parseLong(fields[1]));
+//                    }
+//                }
+//            }
+//        }
+//    }
 
     @Override
     protected void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {

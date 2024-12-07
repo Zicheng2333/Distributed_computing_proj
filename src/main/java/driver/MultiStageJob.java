@@ -50,10 +50,10 @@ public class MultiStageJob {
             System.exit(1);
         }
 
-        if (args.length != 10) {
+        if (args.length != 9) {
             System.err.println("Usage: MultiStageJob <orderInputPath> <tradeInputPath> <intermediateOutputPath1> "
-                    + "<intermediateOutputPath2> <intermediateOutputPath3> <finalOutputPath> <securityID> "
-                    + "<circulatingStock> <interval> <intermediateTradeOutputBasePath>");
+                    + "<intermediateOutputPath2>  <intermediateTradeOutputBasePath> <finalOutputPath> <securityID> "
+                    + "<circulatingStock> <interval>");
             System.exit(-1);
         }
 
@@ -62,12 +62,12 @@ public class MultiStageJob {
         String tradeInputPath = args[1];
         String intermediateOutputPath1 = args[2];
         String intermediateOutputPath2 = args[3];
-        String intermediateOutputPath3 = args[4];
+        String intermediateTradeOutputBasePath = args[4]; //其实是用来存储按time window划分的trade数据的
         String finalOutputPath = args[5];
         String securityID = args[6];
         String circulatingStock = args[7];
         String interval = args[8];
-        String intermediateTradeOutputBasePath = args[9];
+        //String intermediateTradeOutputBasePath = args[9];
 
         List<String> timeWindows = TimeWindowUtils.generateTimeWindows(interval);
 
@@ -136,7 +136,7 @@ public class MultiStageJob {
             }
         }
 
-        ExecutorService executorService = Executors.newFixedThreadPool(Math.min(timeWindows.size(), 6));
+        ExecutorService executorService = Executors.newFixedThreadPool(Math.min(timeWindows.size(), 6)); //TODO 线程池大小
         List<Future<Boolean>> futures = new ArrayList<>();
 
         for (String timeWindow : timeWindows) {
@@ -193,6 +193,9 @@ public class MultiStageJob {
                     Configuration conf3 = new Configuration();
                     conf3.set("circulatingStock", circulatingStock);
 
+                    conf3.set("timeStart", windowStart);
+                    conf3.set("timeEnd", windowEnd);
+
                     Job job3 = Job.getInstance(conf3, "Sum and Label Data - Window " + timeWindow);
                     job3.setJarByClass(MultiStageJob.class);
                     job3.setMapperClass(SumMapper.class);
@@ -203,7 +206,7 @@ public class MultiStageJob {
                     job3.setOutputValueClass(Text.class);
 
                     FileInputFormat.addInputPath(job3, new Path(windowOutputPath));
-                    String job3OutputPath = intermediateOutputPath3 + "/" + timeWindow.replace("-", "_");
+                    String job3OutputPath = finalOutputPath + "/" + timeWindow.replace("-", "_");
                     FileOutputFormat.setOutputPath(job3, new Path(job3OutputPath));
 
                     if (!job3.waitForCompletion(true)) {
@@ -211,30 +214,30 @@ public class MultiStageJob {
                         return false;
                     }
 
-                    logMessage("Start processing time window job4: " + timeWindow);
-
-                    // Job 4
-                    Configuration conf4 = new Configuration();
-                    conf4.set("timeStart", windowStart);
-                    conf4.set("timeEnd", windowEnd);
-
-                    Job job4 = Job.getInstance(conf4, "Final Calculation - Window " + timeWindow);
-                    job4.setJarByClass(MultiStageJob.class);
-                    job4.setMapperClass(FinalCalculationMapper.class);
-                    job4.setReducerClass(FinalCalculationReducer.class);
-                    job4.setMapOutputKeyClass(Text.class);
-                    job4.setMapOutputValueClass(Text.class);
-                    job4.setOutputKeyClass(Text.class);
-                    job4.setOutputValueClass(Text.class);
-
-                    FileInputFormat.addInputPath(job4, new Path(job3OutputPath));
-                    String job4OutputPath = finalOutputPath + "/" + timeWindow.replace("-", "_");
-                    FileOutputFormat.setOutputPath(job4, new Path(job4OutputPath));
-
-                    if (!job4.waitForCompletion(true)) {
-                        logMessage("Job 4 failed for window: " + timeWindow);
-                        return false;
-                    }
+//                    logMessage("Start processing time window job4: " + timeWindow);
+//
+//                    // Job 4
+//                    Configuration conf4 = new Configuration();
+//                    conf4.set("timeStart", windowStart);
+//                    conf4.set("timeEnd", windowEnd);
+//
+//                    Job job4 = Job.getInstance(conf4, "Final Calculation - Window " + timeWindow);
+//                    job4.setJarByClass(MultiStageJob.class);
+//                    job4.setMapperClass(FinalCalculationMapper.class);
+//                    job4.setReducerClass(FinalCalculationReducer.class);
+//                    job4.setMapOutputKeyClass(Text.class);
+//                    job4.setMapOutputValueClass(Text.class);
+//                    job4.setOutputKeyClass(Text.class);
+//                    job4.setOutputValueClass(Text.class);
+//
+//                    FileInputFormat.addInputPath(job4, new Path(job3OutputPath));
+//                    String job4OutputPath = finalOutputPath + "/" + timeWindow.replace("-", "_");
+//                    FileOutputFormat.setOutputPath(job4, new Path(job4OutputPath));
+//
+//                    if (!job4.waitForCompletion(true)) {
+//                        logMessage("Job 4 failed for window: " + timeWindow);
+//                        return false;
+//                    }
 
                     return true;
                 } catch (Exception e) {

@@ -15,15 +15,21 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import reducer.FinalCalculationReducer;
 import reducer.SumThenLabelReducer;
 import reducer.TradeReducer;
+import utils.TimeWindowUtils;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.*;
 
 public class MultiStageJob {
     public static void main(String[] args) throws Exception {
-        if (args.length != 10) {
-            System.err.println("Usage: MultiStageJob <orderInputPath> <tradeInputPath> <intermediateOutputPath1> <intermediateOutputPath2> <intermediateOutputPath3> <finalOutputPath> <securityID> <circulatingStock> <timeStart> <timeEnd> "); //TODO 目前只设计了trade和offer各只有一个路径的情况，如果需要读取上午和下午的文件只需要稍作修改即可
+        if (args.length != 9) {
+            System.err.println("Usage: MultiStageJob <orderInputPath> <tradeInputPath> <intermediateOutputPath1> <intermediateOutputPath2> <intermediateOutputPath3> <finalOutputPath> <securityID> <circulatingStock> <interval>");
             System.exit(-1);
         }
 
-        // 设置参数
+        // 获取参数
         String orderInputPath = args[0];
         String tradeInputPath = args[1];
         String intermediateOutputPath1 = args[2];
@@ -32,15 +38,14 @@ public class MultiStageJob {
         String finalOutputPath = args[5];
         String securityID = args[6];
         String circulatingStock = args[7];
-        String timeStart = args[8];
-        String timeEnd = args[9];
+        String interval = args[8];
 
+        List<String> timeWindows = TimeWindowUtils.generateTimeWindows(interval);
 
         // Step 1: Job to process order data
         Configuration conf1 = new Configuration();
         conf1.set("securityID", securityID);
-
-        Job job1 = Job.getInstance(conf1, "Process Order Data");
+        Job job1 = Job.getInstance(conf1, "Process Order Data and Trade Data");
         job1.setJarByClass(MultiStageJob.class);
         job1.setMapperClass(OrderMapper.class);
         job1.setMapOutputKeyClass(Text.class);
@@ -56,87 +61,138 @@ public class MultiStageJob {
             System.err.println("Job 1 failed");
             System.exit(1);
         }
-        //第一个任务执行完成才会开始执行第二个任务
 
-        // Step 2: Job to process trade data with order data
-        Configuration conf2 = new Configuration();
-        conf2.set("securityID",securityID);
-        conf2.set("timeStart",timeStart);
-        conf2.set("timeEnd",timeEnd);
-
-        Job job2 = Job.getInstance(conf2, "Process Trade Data");
-
-        job2.setJarByClass(MultiStageJob.class);
-        job2.setMapperClass(TradeMapper.class);
-        job2.setReducerClass(TradeReducer.class);
-        job2.setMapOutputKeyClass(NullWritable.class);
-        job2.setMapOutputValueClass(Text.class);
-        job2.setOutputKeyClass(NullWritable.class);
-        job2.setOutputValueClass(Text.class);
-
-        FileInputFormat.addInputPath(job2, new Path(tradeInputPath));
-        FileOutputFormat.setOutputPath(job2, new Path(intermediateOutputPath2));
-
-        FileSystem fs = FileSystem.get(conf2);
-        FileStatus [] fileStatuses = fs.listStatus(new Path(intermediateOutputPath1)); //列出中间路径的文件
-        for (FileStatus status : fileStatuses){
+        // 在进入 timeWindows 循环前，将中间输出的文件作为缓存文件收集起来
+        Configuration cacheConf = new Configuration();
+        FileSystem fs = FileSystem.get(cacheConf);
+        FileStatus[] fileStatuses = fs.listStatus(new Path(intermediateOutputPath1));
+        List<URI> cacheFiles = new ArrayList<>();
+        for (FileStatus status : fileStatuses) {
             String filename = status.getPath().getName();
-            if (filename.startsWith("part-")){
-                job2.addCacheFile(status.getPath().toUri());
+            if (filename.startsWith("part-")) {
+                cacheFiles.add(status.getPath().toUri());
             }
         }
 
-        if (!job2.waitForCompletion(true)) {
-            System.exit(1);
+        // 使用线程池并行执行各个 timeWindow 的任务
+        // 这里以 FixedThreadPool 为例，可根据实际需求调节线程数
+        ExecutorService executorService = Executors.newFixedThreadPool(Math.min(timeWindows.size(), 4));
+        List<Future<Boolean>> futures = new ArrayList<>();
+
+        for (String timeWindow : timeWindows) {
+            Callable<Boolean> task = () -> {
+                try {
+                    System.out.println("##########################processing time window:" + timeWindow);
+
+                    String[] windowTimes = timeWindow.split("-");
+                    String windowStart = windowTimes[0];
+                    String windowEnd = windowTimes[1];
+
+                    if (windowEnd.equals("20190102113000000")){
+                        windowEnd = "20190102113000001";
+                    } else if(windowEnd.equals("20190102150000000")){
+                        windowEnd ="20190102150000001";
+                    }
+
+                    String windowOutputPath = intermediateOutputPath2 + "/" + timeWindow.replace("-", "_");
+
+                    // Job 2
+                    Configuration conf2 = new Configuration();
+                    conf2.set("securityID",securityID);
+                    conf2.set("timeStart", windowStart);
+                    conf2.set("timeEnd", windowEnd);
+
+                    Job job2 = Job.getInstance(conf2, "Process Trade Data - Window " + timeWindow);
+                    job2.setJarByClass(MultiStageJob.class);
+                    job2.setMapperClass(TradeMapper.class);
+                    job2.setReducerClass(TradeReducer.class);
+                    job2.setMapOutputKeyClass(NullWritable.class);
+                    job2.setMapOutputValueClass(Text.class);
+                    job2.setOutputKeyClass(NullWritable.class);
+                    job2.setOutputValueClass(Text.class);
+
+                    FileInputFormat.addInputPath(job2, new Path(tradeInputPath));
+                    FileOutputFormat.setOutputPath(job2, new Path(windowOutputPath));
+
+                    // 为 job2 添加缓存文件（使用同一份缓存文件，不再重复遍历）
+                    for (URI uri : cacheFiles) {
+                        job2.addCacheFile(uri);
+                    }
+
+                    if (!job2.waitForCompletion(true)) {
+                        System.err.println("Job 2 failed for window: " + timeWindow);
+                        return false;
+                    }
+
+                    // Job 3
+                    Configuration conf3 = new Configuration();
+                    conf3.set("circulatingStock", circulatingStock);
+
+                    Job job3 = Job.getInstance(conf3, "Sum and Label Data - Window " + timeWindow);
+
+                    job3.setJarByClass(MultiStageJob.class);
+                    job3.setMapperClass(SumMapper.class);
+                    job3.setReducerClass(SumThenLabelReducer.class);
+                    job3.setMapOutputKeyClass(Text.class);
+                    job3.setMapOutputValueClass(Text.class);
+                    job3.setOutputKeyClass(Text.class);
+                    job3.setOutputValueClass(Text.class);
+
+                    FileInputFormat.addInputPath(job3, new Path(windowOutputPath));
+                    String job3OutputPath = intermediateOutputPath3 + "/" + timeWindow.replace("-", "_");
+                    FileOutputFormat.setOutputPath(job3, new Path(job3OutputPath));
+
+                    if (!job3.waitForCompletion(true)) {
+                        System.err.println("Job 3 failed for window: " + timeWindow);
+                        return false;
+                    }
+
+                    // Job 4
+                    Configuration conf4 = new Configuration();
+                    conf4.set("timeStart", windowStart);
+                    conf4.set("timeEnd", windowEnd);
+
+                    Job job4 = Job.getInstance(conf4, "Final Calculation - Window " + timeWindow);
+
+                    job4.setJarByClass(MultiStageJob.class);
+                    job4.setMapperClass(FinalCalculationMapper.class);
+                    job4.setReducerClass(FinalCalculationReducer.class);
+                    job4.setMapOutputKeyClass(Text.class);
+                    job4.setMapOutputValueClass(Text.class);
+                    job4.setOutputKeyClass(Text.class);
+                    job4.setOutputValueClass(Text.class);
+
+                    FileInputFormat.addInputPath(job4, new Path(job3OutputPath));
+                    String job4OutputPath = finalOutputPath + "/" + timeWindow.replace("-", "_");
+                    FileOutputFormat.setOutputPath(job4, new Path(job4OutputPath));
+
+                    if (!job4.waitForCompletion(true)) {
+                        System.err.println("Job 4 failed for window: " + timeWindow);
+                        return false;
+                    }
+
+                    return true;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    return false;
+                }
+            };
+            futures.add(executorService.submit(task));
         }
 
-        // Step 3: Job to process summation output with SumMapper and SumThenLabelReducer
-        Configuration conf3 = new Configuration();
-        conf3.set("circulatingStock", circulatingStock);
-
-        Job job3 = Job.getInstance(conf3, "Sum and Label Data");
-
-        job3.setJarByClass(MultiStageJob.class);
-        job3.setMapperClass(SumMapper.class);
-        job3.setReducerClass(SumThenLabelReducer.class);
-        job3.setMapOutputKeyClass(Text.class);
-        job3.setMapOutputValueClass(Text.class);
-        job3.setOutputKeyClass(Text.class);
-        job3.setOutputValueClass(Text.class);
-
-        FileInputFormat.addInputPath(job3, new Path(intermediateOutputPath2));
-        FileOutputFormat.setOutputPath(job3, new Path(intermediateOutputPath3));
-
-        if (!job3.waitForCompletion(true)) {
-            System.exit(1);
+        // 等待所有任务结束
+        executorService.shutdown();
+        boolean allSuccess = true;
+        for (Future<Boolean> future : futures) {
+            if (!future.get()) {
+                allSuccess = false;
+            }
         }
 
-        // Step 3: Job to process final output with FinalCalculationMapper and FinalCalculationReducer
-        Configuration conf4 = new Configuration();
-        conf3.set("timeStart", timeStart);
-        conf3.set("timeEnd", timeEnd);
-
-        Job job4 = Job.getInstance(conf4, "Final Calculation");
-
-        job4.setJarByClass(MultiStageJob.class);
-        job4.setMapperClass(FinalCalculationMapper.class);
-        job4.setReducerClass(FinalCalculationReducer.class);
-        job4.setMapOutputKeyClass(Text.class);
-        job4.setMapOutputValueClass(Text.class);
-        job4.setOutputKeyClass(Text.class);
-        job4.setOutputValueClass(Text.class);
-
-
-
-        FileInputFormat.addInputPath(job4, new Path(intermediateOutputPath3));
-        FileOutputFormat.setOutputPath(job4, new Path(finalOutputPath));
-
-        if (!job4.waitForCompletion(true)) {
+        if (!allSuccess) {
+            System.err.println("Some window tasks failed.");
             System.exit(1);
         }
-
-
-
 
         System.exit(0);
     }

@@ -11,10 +11,6 @@ public class TimeWindowUtils {
         List<String> timeWindows = new ArrayList<>();
         int interval = Integer.parseInt(intervalStr) * 1000; //转换为毫秒
 
-        //String morningStart1 = "20190102091500000";
-        //String morningEnd1 = "20190102092500001";
-        //timeWindows.add(morningStart1+"-"+morningEnd1);
-
         String morningStart2 = "20190102093000000";
         String morningEnd2 = "20190102113000000";
 
@@ -24,10 +20,6 @@ public class TimeWindowUtils {
         String afternoonEnd1 = "20190102150000000";
 
         generateTimeWindowsForPeriod(sdf,afternoonStart1,afternoonEnd1,interval,timeWindows);
-
-        //String afternoonStart2 = "20190102145700000";
-        //String afternoonEnd2 = "20190102150000001"; //TODO 集合竞价阶段
-        //timeWindows.add(afternoonStart2+"-"+afternoonEnd2);
 
         return timeWindows;
     }

@@ -1,9 +1,7 @@
 package driver;
 
 import mapper.*;
-import reducer.FinalCalculationReducer;
-import reducer.SumThenLabelReducer;
-import reducer.TradeReducer;
+import reducer.FinalAggregationReducer; // 新增的最终归并Reducer
 import utils.TimeWindowUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -21,7 +19,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.*;
 
 public class MultiStageJob {
 
@@ -29,7 +26,6 @@ public class MultiStageJob {
 
     private static void logMessage(String msg) throws IOException {
         long currentTime = System.currentTimeMillis();
-        // 使用SimpleDateFormat将毫秒级时间戳转换成人类可读的日期时间
         java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         String formattedTime = sdf.format(new java.util.Date(currentTime));
         String logStr = "[" + formattedTime + "] " + msg;
@@ -50,7 +46,7 @@ public class MultiStageJob {
             System.exit(1);
         }
 
-        if (args.length != 9) {
+        if (args.length != 8) {
             System.err.println("Usage: MultiStageJob <orderInputPath> <tradeInputPath> <intermediateOutputPath1> "
                     + "<intermediateOutputPath2>  <intermediateTradeOutputBasePath> <finalOutputPath> <securityID> "
                     + "<circulatingStock> <interval>");
@@ -61,19 +57,18 @@ public class MultiStageJob {
         String orderInputPath = args[0];
         String tradeInputPath = args[1];
         String intermediateOutputPath1 = args[2];
-        String intermediateOutputPath2 = args[3];
-        String intermediateTradeOutputBasePath = args[4]; //其实是用来存储按time window划分的trade数据的
-        String finalOutputPath = args[5];
-        String securityID = args[6];
-        String circulatingStock = args[7];
-        String interval = args[8];
-        //String intermediateTradeOutputBasePath = args[9];
+        //String intermediateOutputPath2 = args[3]; // 不再用这个作为多窗口输出目录，可以作为中间目录使用
+        String intermediateTradeOutputBasePath = args[3];
+        String finalOutputPath = args[4];
+        String securityID = args[5];
+        String circulatingStock = args[6];
+        String interval = args[7];
 
         List<String> timeWindows = TimeWindowUtils.generateTimeWindows(interval);
 
         logMessage("Processing order data");
 
-        // Step 1: Job to process order data
+        // Step 1: Job to process order data (不变)
         Configuration conf1 = new Configuration();
         conf1.set("securityID", securityID);
         Job job1 = Job.getInstance(conf1, "Process Order Data");
@@ -93,7 +88,8 @@ public class MultiStageJob {
             System.exit(1);
         }
 
-        // Step 2: 预处理交易数据，将符合securityID的交易数据按时间窗口输出到对应目录
+        // Step 2: 预处理交易数据
+        // 将数据按照timeWindow输出 (timeWindow, record)
         StringBuilder sb = new StringBuilder();
         for (String tw : timeWindows) {
             sb.append(tw).append(",");
@@ -108,7 +104,7 @@ public class MultiStageJob {
         Job preprocessJob = Job.getInstance(confPre, "Preprocess Trade Data by Windows");
         preprocessJob.setJarByClass(MultiStageJob.class);
         preprocessJob.setMapperClass(TradePreprocessingMapper.class);
-        // 无Reduce任务
+        // 无Reduce任务，直接输出 (timeWindow, 原始记录)
         preprocessJob.setMapOutputKeyClass(Text.class);
         preprocessJob.setMapOutputValueClass(Text.class);
         preprocessJob.setOutputKeyClass(Text.class);
@@ -124,7 +120,7 @@ public class MultiStageJob {
 
         logMessage("Adding cache files");
 
-        // 准备Cache Files
+        // 准备Cache Files (order映射文件)
         Configuration cacheConf = new Configuration();
         FileSystem fs = FileSystem.get(cacheConf);
         FileStatus[] fileStatuses = fs.listStatus(new Path(intermediateOutputPath1));
@@ -136,129 +132,35 @@ public class MultiStageJob {
             }
         }
 
-        ExecutorService executorService = Executors.newFixedThreadPool(Math.min(timeWindows.size(), 6)); //TODO 线程池大小
-        List<Future<Boolean>> futures = new ArrayList<>();
+        logMessage("Start final aggregation job");
 
-        for (String timeWindow : timeWindows) {
-            Callable<Boolean> task = () -> {
-                try {
-                    logMessage("Start processing time window: " + timeWindow);
+        // 最终合并Job（替代原来的多Job并行逻辑）
+        Configuration finalConf = new Configuration();
+        finalConf.set("circulatingStock", circulatingStock);
 
-                    String[] windowTimes = timeWindow.split("-");
-                    String windowStart = windowTimes[0];
-                    String windowEnd = windowTimes[1];
+        Job finalJob = Job.getInstance(finalConf, "Final Aggregation Job");
+        finalJob.setJarByClass(MultiStageJob.class);
 
-                    if (windowEnd.equals("20190102113000000")) {
-                        windowEnd = "20190102113000001";
-                    } else if (windowEnd.equals("20190102150000000")) {
-                        windowEnd = "20190102150000001";
-                    }
+        // 读取预处理输出(timeWindow, record)
+        FileInputFormat.addInputPath(finalJob, new Path(intermediateTradeOutputBasePath));
+        FileOutputFormat.setOutputPath(finalJob, new Path(finalOutputPath));
 
-                    String windowOutputPath = intermediateOutputPath2 + "/" + timeWindow.replace("-", "_");
-                    String windowDirName = "window_" + timeWindow.replace("-", "_");
-                    Path windowInputPath = new Path(intermediateTradeOutputBasePath, windowDirName);
+        // Mapper可以直接使用一个简单的Mapper输出，Reducer中进行合并逻辑
+        finalJob.setMapperClass(FinalAggregationMapper.class);
+        finalJob.setMapOutputKeyClass(Text.class);
+        finalJob.setMapOutputValueClass(Text.class);
 
-                    // Job 2
-                    Configuration conf2 = new Configuration();
-                    conf2.set("securityID", securityID);
-                    conf2.set("timeStart", windowStart);
-                    conf2.set("timeEnd", windowEnd);
+        finalJob.setReducerClass(FinalAggregationReducer.class);
+        finalJob.setOutputKeyClass(Text.class);
+        finalJob.setOutputValueClass(Text.class);
 
-                    Job job2 = Job.getInstance(conf2, "Process Trade Data - Window " + timeWindow);
-                    job2.setJarByClass(MultiStageJob.class);
-                    // 使用TradeMapper处理预先分好的数据
-                    job2.setMapperClass(TradeMapper.class);
-                    job2.setReducerClass(TradeReducer.class);
-                    job2.setMapOutputKeyClass(NullWritable.class);
-                    job2.setMapOutputValueClass(Text.class);
-                    job2.setOutputKeyClass(NullWritable.class);
-                    job2.setOutputValueClass(Text.class);
-
-                    FileInputFormat.addInputPath(job2, windowInputPath);
-                    FileOutputFormat.setOutputPath(job2, new Path(windowOutputPath));
-
-                    // 为 job2 添加缓存文件
-                    for (URI uri : cacheFiles) {
-                        job2.addCacheFile(uri);
-                    }
-
-                    if (!job2.waitForCompletion(true)) {
-                        logMessage("Job 2 failed for window: " + timeWindow);
-                        return false;
-                    }
-
-                    logMessage("Start processing time window job3: " + timeWindow);
-
-                    // Job 3
-                    Configuration conf3 = new Configuration();
-                    conf3.set("circulatingStock", circulatingStock);
-
-                    conf3.set("timeStart", windowStart);
-                    conf3.set("timeEnd", windowEnd);
-
-                    Job job3 = Job.getInstance(conf3, "Sum and Label Data - Window " + timeWindow);
-                    job3.setJarByClass(MultiStageJob.class);
-                    job3.setMapperClass(SumMapper.class);
-                    job3.setReducerClass(SumThenLabelReducer.class);
-                    job3.setMapOutputKeyClass(Text.class);
-                    job3.setMapOutputValueClass(Text.class);
-                    job3.setOutputKeyClass(Text.class);
-                    job3.setOutputValueClass(Text.class);
-
-                    FileInputFormat.addInputPath(job3, new Path(windowOutputPath));
-                    String job3OutputPath = finalOutputPath + "/" + timeWindow.replace("-", "_");
-                    FileOutputFormat.setOutputPath(job3, new Path(job3OutputPath));
-
-                    if (!job3.waitForCompletion(true)) {
-                        logMessage("Job 3 failed for window: " + timeWindow);
-                        return false;
-                    }
-
-//                    logMessage("Start processing time window job4: " + timeWindow);
-//
-//                    // Job 4
-//                    Configuration conf4 = new Configuration();
-//                    conf4.set("timeStart", windowStart);
-//                    conf4.set("timeEnd", windowEnd);
-//
-//                    Job job4 = Job.getInstance(conf4, "Final Calculation - Window " + timeWindow);
-//                    job4.setJarByClass(MultiStageJob.class);
-//                    job4.setMapperClass(FinalCalculationMapper.class);
-//                    job4.setReducerClass(FinalCalculationReducer.class);
-//                    job4.setMapOutputKeyClass(Text.class);
-//                    job4.setMapOutputValueClass(Text.class);
-//                    job4.setOutputKeyClass(Text.class);
-//                    job4.setOutputValueClass(Text.class);
-//
-//                    FileInputFormat.addInputPath(job4, new Path(job3OutputPath));
-//                    String job4OutputPath = finalOutputPath + "/" + timeWindow.replace("-", "_");
-//                    FileOutputFormat.setOutputPath(job4, new Path(job4OutputPath));
-//
-//                    if (!job4.waitForCompletion(true)) {
-//                        logMessage("Job 4 failed for window: " + timeWindow);
-//                        return false;
-//                    }
-
-                    return true;
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    return false;
-                }
-            };
-            futures.add(executorService.submit(task));
+        // 添加缓存文件
+        for (URI uri : cacheFiles) {
+            finalJob.addCacheFile(uri);
         }
 
-        // 等待所有时间窗口任务结束
-        executorService.shutdown();
-        boolean allSuccess = true;
-        for (Future<Boolean> future : futures) {
-            if (!future.get()) {
-                allSuccess = false;
-            }
-        }
-
-        if (!allSuccess) {
-            logMessage("Some window tasks failed.");
+        if (!finalJob.waitForCompletion(true)) {
+            logMessage("Final Aggregation Job failed");
             System.exit(1);
         }
 
@@ -266,8 +168,5 @@ public class MultiStageJob {
         logWriter.close();
         System.exit(0);
 
-        // 程序正常结束前关闭日志
-        //（实际上System.exit(0)会直接退出JVM，可以将日志关闭写在System.exit(0)之前的地方）
-        // 这里加上只是为了示意，如果真正执行到System.exit(0)日志文件也可以不手动关闭。
     }
 }

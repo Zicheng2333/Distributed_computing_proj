@@ -3,7 +3,6 @@
     <output-path>$PROJECT_DIR$/out/artifacts/distributed_storage_proj_jar</output-path>
     <root id="archive" name="distributed_storage_proj.jar">
       <element id="module-output" name="distributed_storage_proj" />
-<<<<<<< HEAD
       <element id="extracted-dir" path="$MAVEN_REPOSITORY$/org/eclipse/jetty/jetty-webapp/9.4.40.v20210413/jetty-webapp-9.4.40.v20210413.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$MAVEN_REPOSITORY$/org/eclipse/jetty/jetty-io/9.4.40.v20210413/jetty-io-9.4.40.v20210413.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$MAVEN_REPOSITORY$/com/squareup/okhttp/okhttp/2.7.5/okhttp-2.7.5.jar" path-in-jar="/" />

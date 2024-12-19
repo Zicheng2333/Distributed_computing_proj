@@ -22,15 +22,15 @@ public class TradePreprocessingMapper extends Mapper<LongWritable, Text, Text, T
     protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
         String line = value.toString();
         int fieldCount = 16; // 预计字段数量
-        String[] fields = new String[fieldCount];
-        int startAt = 0, fieldIndex = 0;
+        String[] fields = new String[fieldCount]; // 用于存储输入字段的预分配数组
+        int startAt = 0, fieldIndex = 0; // 初始化开始位置和字段索引
 
         for (int i = 0; i < line.length() && fieldIndex < fieldCount; i++) {
             if (line.charAt(i) == '\t') {
                 fields[fieldIndex++] = line.substring(startAt, i);
                 startAt = i + 1;
             }
-        }
+        } // 按制表符分割字段
         if (fieldIndex < fieldCount) {
             fields[fieldIndex++] = line.substring(startAt); // 最后一列
         }

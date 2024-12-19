@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class MultiStageJob {
-
+// 此类为多阶段任务的主类，用于处理逐笔委托表和逐笔成交表数据
     private static BufferedWriter logWriter = null;
 
     private static void logMessage(String msg) throws IOException {

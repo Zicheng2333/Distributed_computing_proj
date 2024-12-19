@@ -26,6 +26,7 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
     private double midBuyAmount = 0, midSellAmount = 0; // 中单买入/卖出金额
     private long smallBuyQty = 0, smallSellQty = 0; // 小单买入/卖出数量
     private double smallBuyAmount = 0, smallSellAmount = 0; // 小单买入/卖出金额
+    private boolean headerPrinted = false;  // 标记表头是否已打印
 
     @Override
     protected void setup(Context context) throws IOException {
@@ -56,7 +57,7 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
                     }
                 }
             }
-        }*/
+        }*/ // 此段代码为原逻辑，但由于无需获取order数据，暂时注释掉
     }
 
     @Override
@@ -64,8 +65,8 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
         // key: timeWindow
         // values: 若干条原始Trade记录（16字段）
         // 这里的过程：
-        // 1. 对该timeWindow的所有记录执行类似Job2 (TradeReducer)逻辑：对每条Trade记录，根据bidApplSeqNum/offerApplSeqNum的时间判断type(买或卖)
-        // 2. 对结果再聚合并打标签，与SumThenLabelReducer逻辑相同
+        // 1. 对该timeWindow的所有记录执行：对每条Trade记录，根据bidApplSeqNum/offerApplSeqNum的时间判断type(买或卖)
+        // 2. 对结果再聚合并打标签：根据circulatingStock对最终成交分级打标签并汇总
 
         // 为了实现类似原逻辑，需要记录每一个主动单最终汇总： ApplSeqNum, totalQty, totalAmount, tradeType
         // 然后根据circulatingStock对最终成交分级打标签并汇总
@@ -75,6 +76,13 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
 
         // 先清理之前窗口的累计（多个timeWindow会多次调用reduce，这里对每个timeWindow重置）
         resetAggregation();
+
+        if (!headerPrinted) {
+            String header = "时间区间,主力净流入,主力流入,主力流出,超大买单成交量,超大买单成交额,超大卖单成交量,超大卖单成交额,大买单成交量," +
+                    "大买单成交额,大卖单成交量,大卖单成交额,中买单成交量,中买单成交额,中卖单成交量,中卖单成交额,小买单成交量,小买单成交额,小卖单成交量,小卖单成交额";
+            context.write(new Text(header), null);  // 输出表头
+            headerPrinted = true;  // 更新标记，确保表头只打印一次
+        }
 
         for (Text val : values) { // 遍历values
             String[] fields = val.toString().split("\t"); // 按制表符分割字段
@@ -102,7 +110,7 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
                     type = 0;
                 }else {
                     type = Long.parseLong(bidApplSeqNum) > Long.parseLong(offerApplSeqNum) ? 1 : 0;
-                }*/
+                }*///此段代码为原逻辑，但由于无需获取order数据，暂时注释掉
                 int type = Long.parseLong(bidApplSeqNum) > Long.parseLong(offerApplSeqNum) ? 1 : 0; // 1买，0卖
 
                 // 根据type确定使用的applSeqNum作key：如果type=1（买），主动方是bid方；如果type=0（卖），主动方是offer方
@@ -118,7 +126,7 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
         // 所有记录处理完毕后，对aggMap中数据进行打标签和汇总
         for (AggData ad : aggMap.values()) {
             double tradeVolumeRatio = (double) ad.totalQty / circulatingStock; // 成交量比例
-            String label = "";
+            String label = ""; // 标签，代表成交量级别
             if (tradeVolumeRatio >= 0.003 || ad.totalQty >= 200000 || ad.totalAmount >= 1000000) {
                 label = "超大"; // 判断是否为超大单
             } else if (tradeVolumeRatio >= 0.001 || ad.totalQty >= 60000 || ad.totalAmount >= 300000) {
@@ -167,7 +175,7 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
         }
 
         double netInflow = mainInflow - mainOutflow; // 计算净流入
-        String result = String.join("\t",
+        String result = String.join(",",
                 String.valueOf(netInflow), String.valueOf(mainInflow), String.valueOf(mainOutflow),
                 String.valueOf(ultraBuyQty), String.valueOf(ultraBuyAmount),
                 String.valueOf(ultraSellQty), String.valueOf(ultraSellAmount),
@@ -179,7 +187,7 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
                 String.valueOf(smallSellQty), String.valueOf(smallSellAmount)
         ); // 拼接结果字符串
 
-        context.write(key, new Text(result));
+        context.write(null, new Text(key + "," + result));
     } // 输出timeWindow和最终聚合结果
 
     private void resetAggregation() {
@@ -197,8 +205,8 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
 
     static class AggData {
         int type; // 1:买,0:卖
-        long totalQty;
-        double totalAmount;
+        long totalQty; // 总成交量
+        double totalAmount; // 总成交额
         AggData(int type) {
             this.type = type;
         }

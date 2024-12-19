@@ -58,9 +58,6 @@ public class SingleInputJob {
 
         // 获取参数
         String tradeInputPath = args[0]; // 获取逐笔成交表输入路径
-        //String intermediateOutputPath1 = args[1]; // 获取第一个中间输出路径
-        //String intermediateOutputPath2 = args[3]; // 不再用这个作为多窗口输出目录，可以作为中间目录使用
-
         String finalOutputPath = args[1]; // 获取最终输出路径
         String securityID = args[2]; // 获取邮票ID
         String circulatingStock = args[3]; // 获取流通股本
@@ -74,8 +71,6 @@ public class SingleInputJob {
         for (String tw : timeWindows) {
             sb.append(tw).append(",");
         } // 生成时间窗口字符串
-
-
 
         logMessage("Start final aggregation job");// 记录日志：开始最终聚合任务
 

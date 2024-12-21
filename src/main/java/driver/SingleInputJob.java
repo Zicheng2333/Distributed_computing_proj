@@ -99,6 +99,7 @@ public class SingleInputJob {
         finalJob.setOutputValueClass(Text.class); // 设置输出值类型
 
 
+
         if (!finalJob.waitForCompletion(true)) {
             logMessage("Final Aggregation Job failed");
             System.exit(1);

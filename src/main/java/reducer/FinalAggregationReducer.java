@@ -79,7 +79,7 @@ public class FinalAggregationReducer extends Reducer<Text, Text, Text, Text> {
 
         if (!headerPrinted) {
             String header = "主力净流入,主力流入,主力流出,超大买单成交量,超大买单成交额,超大卖单成交量,超大卖单成交额,大买单成交量," +
-                    "大买单成交额,大卖单成交量,大卖单成交额,中买单成交量,中买单成交额,中卖单成交量,中卖单成交额,小买单成交量,小买单成交额,小卖单成交量,小卖单成交额，时间区间";
+                    "大买单成交额,大卖单成交量,大卖单成交额,中买单成交量,中买单成交额,中卖单成交量,中卖单成交额,小买单成交量,小买单成交额,小卖单成交量,小卖单成交额,时间区间";
             context.write(new Text(header), null);  // 输出表头
             headerPrinted = true;  // 更新标记，确保表头只打印一次
         }

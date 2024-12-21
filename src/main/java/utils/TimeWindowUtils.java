@@ -31,10 +31,10 @@ public class TimeWindowUtils {
         while(startTime.before(endTime)){ //严格小于
             Date nextTime = new Date(startTime.getTime() + interval); //计算下一个时间
             if(nextTime.after(endTime)){ //严格大于
-                timeWindows.add(sdf.format(startTime)+"to"+sdf.format(endTime)); //将时间窗口添加到列表
+                timeWindows.add(sdf.format(startTime)+" to "+sdf.format(endTime)); //将时间窗口添加到列表
                 break;
             }
-            timeWindows.add(sdf.format(startTime)+"to"+sdf.format(nextTime)); //将时间窗口添加到列表
+            timeWindows.add(sdf.format(startTime)+" to "+sdf.format(nextTime)); //将时间窗口添加到列表
             startTime = nextTime; //更新开始时间
         }
     }

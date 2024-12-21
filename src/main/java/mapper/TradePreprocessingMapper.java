@@ -51,7 +51,7 @@ public class TradePreprocessingMapper extends Mapper<LongWritable, Text, Text, T
             // 判断该记录属于哪个时间窗口
             for (String window : timeWindows) { // 遍历时间窗口
                 if (window.trim().isEmpty()) continue; // 跳过空窗口
-                StringTokenizer windowTokenizer = new StringTokenizer(window, "to");
+                StringTokenizer windowTokenizer = new StringTokenizer(window, " to "); // 用" to "分割时间窗口
                 long start = Long.parseLong(windowTokenizer.nextToken()); // 获取开始时间
                 long end = Long.parseLong(windowTokenizer.nextToken()); // 获取结束时间
 

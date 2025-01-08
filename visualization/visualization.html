@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票主力资金流向可视化</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div id="main" style="width: 100%; height: 1200px;"></div>
+    <script>
+        //使用方法：将本文件放在本地，在终端命令行中输入python -m http.server 8000
+        // 然后在浏览器中打开http://localhost:8000/visualization.html，即可看到实时更新的图表
+        // 初始化图表
+        const chart = echarts.init(document.getElementById('main'));
+
+        // 定义初始图表配置
+        const options = {
+            title: { text: '股票主力资金流向', left: 'center' },
+            tooltip: { trigger: 'item' },
+            grid: [
+                { top: '5%', left: '5%', right: '5%', height: '10%' }, // 饼图区域
+                { top: '35%', left: '10%', right: '10%', height: '20%' }, // 柱状图区域
+                { top: '60%', left: '10%', right: '10%', height: '30%' }, // 折线图区域
+            ],
+            series: [
+                // 饼图 - 流入分布
+                {
+                    name: '流入分布',
+                    type: 'pie',
+                    radius: '15%',
+                    center: ['25%', '20%'], // 将流入饼图放置在页面左上
+                    data: [],
+                    itemStyle: {
+                        color: function (params) {
+                            const colors = ['#800000', '#D32F2F', '#E57373', '#FFCDD2']; // 红色从深到浅
+                            return colors[params.dataIndex];
+                        }
+                    },
+                    label: {
+                        show: true,
+                        formatter: '{b}: {d}%', // 显示名称和百分比
+                        position: 'outside'
+                    }
+                },
+                // 饼图 - 流出分布
+                {
+                    name: '流出分布',
+                    type: 'pie',
+                    radius: '15%',
+                    center: ['75%', '20%'], // 将流出饼图放置在页面右上
+                    data: [],
+                    itemStyle: {
+                        color: function (params) {
+                            const colors = ['#004D40', '#00796B', '#26A69A', '#B2DFDB']; // 绿色从深到浅
+                            return colors[params.dataIndex];
+                        }
+                    },
+                    label: {
+                        show: true,
+                        formatter: '{b}: {d}%', // 显示名称和百分比
+                        position: 'outside'
+                    }
+                },
+                // 柱状图
+                {
+                    name: '主力资金柱状图',
+                    type: 'bar',
+                    data: [],
+                    barWidth: '30%', // 缩小柱宽
+                    label: {
+                        show: true,
+                        position: 'top',
+                        formatter: '{c}'
+                    },
+                    itemStyle: {
+                        color: function (params) {
+                            if (params.dataIndex === 2) {
+                                // 主力净流入
+                                return params.value > 0 ? '#D32F2F' : '#26A69A'; // 红色或绿色
+                            }
+                            return params.dataIndex === 0 ? '#D32F2F' : '#26A69A'; // 主力流入/主力流出
+                        }
+                    }
+                },
+                // 折线图 - 主力流入随时间变化
+                {
+                    name: '主力流入',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: [],
+                    itemStyle: { color: '#D32F2F' }, // 折线颜色为红色
+                },
+                // 折线图 - 主力流出随时间变化
+                {
+                    name: '主力流出',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: [],
+                    itemStyle: { color: '#26A69A' }, // 折线颜色为绿色
+                },
+            ],
+            xAxis: [
+                { gridIndex: 1, type: 'category', data: ['主力流入', '主力流出', '主力净流入'] }, // 柱状图X轴
+                { gridIndex: 2, type: 'category', data: [] }, // 折线图时间X轴
+            ],
+            yAxis: [
+                { gridIndex: 1, type: 'value' }, // 柱状图Y轴
+                { gridIndex: 2, type: 'value' }, // 折线图Y轴
+            ],
+        };
+
+        chart.setOption(options);
+
+        // 读取和更新数据
+        async function fetchData() {
+            // 使用本地的 CSV 文件（需要运行在本地服务器中）
+            const response = await fetch('000001-时间间隔10min-results.csv');//根据需求改为需要进行可视化的数据文件路径
+            const csvText = await response.text();
+
+            // 将 CSV 转换为数组
+            const rows = csvText.split('\n').map(row => row.split(','));
+
+            // 提取列名和数据行
+            const headers = rows[0];
+            const data = rows.slice(1).filter(row => row.length === headers.length);
+
+            // 定义数据索引
+            let currentIndex = 1;
+
+            // 每隔 10 秒更新数据
+            setInterval(() => {
+                const row = data[currentIndex];
+
+                const time = row[19]; // 读取时间数据
+
+                // 读取成交额数据
+                const inflow = [
+                    { value: parseFloat(row[4]), name: '超大单' }, // 超大买单成交额
+                    { value: parseFloat(row[8]), name: '大单' },   // 大买单成交额
+                    { value: parseFloat(row[12]), name: '中单' },  // 中买单成交额
+                    { value: parseFloat(row[16]), name: '小单' }   // 小买单成交额
+                ];
+                const outflow = [
+                    { value: parseFloat(row[6]), name: '超大单' }, // 超大卖单成交额
+                    { value: parseFloat(row[10]), name: '大单' },  // 大卖单成交额
+                    { value: parseFloat(row[14]), name: '中单' },  // 中卖单成交额
+                    { value: parseFloat(row[18]), name: '小单' }   // 小卖单成交额
+                ];
+
+                // 计算总和以求百分比
+                const inflowTotal = inflow.reduce((sum, item) => sum + item.value, 0);
+                const outflowTotal = outflow.reduce((sum, item) => sum + item.value, 0);
+
+                inflow.forEach(item => {
+                    item.value = Math.round(item.value * 100) / 100; // 保留两位小数
+                    item.percentage = ((item.value / inflowTotal) * 100).toFixed(2);
+                });
+                outflow.forEach(item => {
+                    item.value = Math.round(item.value * 100) / 100;
+                    item.percentage = ((item.value / outflowTotal) * 100).toFixed(2);
+                });
+
+                // 计算柱状图数据
+                const inflowSum = inflow[0].value + inflow[1].value; // 超大买单 + 大买单
+                const outflowSum = outflow[0].value + outflow[1].value; // 超大卖单 + 大卖单
+                const netInflow = inflowSum - outflowSum;
+
+                const barData = [inflowSum, outflowSum, netInflow];
+
+                // 折线图数据
+                options.xAxis[1].data.push(time);
+                options.series[3].data.push(inflowSum); // 主力流入
+                options.series[4].data.push(outflowSum); // 主力流出
+
+                if (options.xAxis[1].data.length > 10) {
+                    options.xAxis[1].data.shift();
+                    options.series[3].data.shift();
+                    options.series[4].data.shift();
+                }
+                
+                // 更新图表数据
+                chart.setOption({
+                    xAxis: [
+                        {}, // 柱状图X轴
+                        { data: options.xAxis[1].data } // 更新折线图时间X轴
+                    ],
+                    series: [
+                        { data: inflow }, // 流入分布饼图
+                        { data: outflow }, // 流出分布饼图
+                        { data: barData }, // 柱状图
+                        { data: options.series[3].data }, // 主力流入折线图
+                        { data: options.series[4].data }  // 主力流出折线图
+                    ]
+                });
+
+
+                // 更新索引
+                currentIndex = (currentIndex + 1) % data.length;
+            }, 10000); // 每 10 秒更新一次
+        }
+
+        // 加载数据
+        fetchData();
+    </script>
+</body>
+</html>
